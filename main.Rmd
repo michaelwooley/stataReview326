@@ -1,0 +1,772 @@
+<script src="js/hideOutput.js"></script>
+<style>
+.showopt {
+  background-color: #004c93;
+  color: #FFFFFF;
+  width: 100px;
+  height: 20px;
+  text-align: center;
+  vertical-align: middle !important;
+  float: right;
+  font-family: sans-serif;
+  border-radius: 8px;
+}
+
+.showopt:hover {
+    background-color: #dfe4f2;
+    color: #004c93;
+}
+
+pre.plot {
+  background-color: white !important;
+}
+</style>
+
+<script type="text/javascript" src='http://haghish.com/statax/Statax.js'></script>
+
+---
+title: "Stata Review"
+author: "Econ 326^[Instructor: Cynthia Kinnan, TA: Michael Wooley]"
+date: "Spring 2017"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r, include=FALSE}
+knitr::knit_hooks$set(source = function(x, options) {
+  return(paste0(
+    "```{ ",
+    ifelse(is.null(options$class),
+      "", 
+      paste0(" .", gsub(" ", " .", options$class))
+    ),
+    "}\n",
+    x,
+    "\n```"
+  ))
+})
+```
+
+```{r setup,engine='R',echo=FALSE,warning=FALSE,message=FALSE}
+
+# Add paths to i) Stata and ii) Your Working Directory
+statapath <- 'C:/Program Files (x86)/Stata13/stata.exe'
+rootpath <- "C:/Users/Michael/Dropbox/teaching/ECON326/Recitations/Recitation1/stataReview326"
+
+require(knitr)
+opts_chunk$set(engine="stata", engine.path=statapath, comment="")
+opts_chunk$set(root.dir = rootpath)
+knitr::opts_chunk$set(cache=TRUE)
+knitr::opts_chunk$set(fig.retina=2)
+
+knit_hooks$set(collectcode = function(before, options, envir) {
+  if (!before) {
+    profile <- file("profile.do", open="at")
+    writeLines(options$code, profile)
+    close(profile)
+  }
+})
+```
+
+```{stata setup_stata, echo=FALSE,message=FALSE,results='hide',collectcode=TRUE}
+// Now that stata engine
+set linesize 120
+```
+
+<span style="color:red">
+_**NOTE:** If you are viewing this on Canvas then the Syntax highlighting won't show up (something about how it deals with Javascript). If you download it and/or view it in a regular web browser it should show up fine._
+</span>
+
+This is a non-comprehensive review of Stata. It is based on a set of data files that can be downloaded directly from Canvas (see `files/sections/stata_review_empty.zip`).
+
+## Preliminaries
+
+### File Organization
+
+Before jumping into the do-file I want to make some remarks about the directory setup and handling of the data.
+
+There are a lot of _empty_ directories in what you downloaded. These are all set up in anticipation of needing them later on. Even if you think that you only have a small project at the beginning you will probably end up with a whole bunch of files by the end. Be a proactive organizer.
+
+The underlying data that we'll use is stored in the directory `data/raw`. We're going to put together a file (the aforementioned do-file) that will tell Stata to carry out a set of commands on the data. **However, we will never actually modify the data in `data/raw`. We will instead create new datasets and save those elsewhere.** This is critical for replicating an analysis.
+
+### Comments
+
+You're going to want to comment your code so that it is clear to future-you and others what exactly it is that you're doing.
+
+We can comment in a lot of ways:
+
+```{r,results='hide',class='sh_stata'}
+* one line comment - Beginning of line only
+disp "Another Method" // one line comment - Any place in line
+
+/*
+    BLOCK COMMENT  
+*/
+```
+
+### Running and getting commands 
+
+We can easily send commands from the do-file to the Stata interpreter in a few ways:
+
+- `ctrl+d` runs the entire do file
+- `[highlight line]+ctrl+d` runs the selected lines 
+- `ctrl+r` _quietly_ runs the do-file. That is nothing is printed to the Stata output screen.
+
+You can also fetch previously-executed commands from i) the left panel (assuming default Stata config) or ii) clicking on the command line and hitting `fn+[UP arrow]`.
+
+# A Sample `.do` File
+
+## Header
+
+This is a header for the underlying .do file. Give a short description of what the 
+script does, what (if anything) the user needs to specify, and (if applicable) what
+it produces. 
+
+```{r,eval=FALSE,class='sh_stata'}
+/*
+
+main - Review of Stata commands
+Michael Wooley
+Econ 326 (or assoc project) 
+Last Edit: March 31, 2017
+
+Script will run so long as modify wk_dir to "stata_review" directory.
+
+*/
+```
+
+
+
+## Setup
+
+Clear everything from memory
+```{r ,results='hide',class='sh_stata',collectcode=TRUE}
+clear all
+``` 
+
+Avoid the annoying "more" message
+```{r ,results='hide',class='sh_stata',collectcode=TRUE}
+set more off
+```
+Now define global "macros", which is what Stata calls variables that are _not_ columns in the dataframe. These are the variables that the user needs to specify in order to run your code; make them conspicuous.
+
+<div class='fold o'>
+```{r class='sh_stata',collectcode=TRUE}
+// WORKING DIRECTORY - Must be set to run the script.
+global wk_dir "C:/Users/Michael/Dropbox/teaching/ECON326/Recitations/Recitation1/stata_review"
+// Log file name
+global log_file "log/state_review"
+```
+</div>
+
+In this case it will be overkill to seprately define `wk_dir`. We will only use it for one purpose. However, you could imagine a case where there is a need to jump between several directories (and this might only occur on line 345). Defining these macros is going to make it so that the user only needs to set/change these once.
+
+Set the working directory to `wk_dir`, which we specified above. We use the Stata macro syntax `\$[macro name]`. The prefix on the name tells Stata to interpret the input as the name of a global macro not as, e.g., a column name.
+<div class='fold o'>
+```{r,collectcode=TRUE,class='sh_stata'}
+cd $wk_dir 
+```
+</div>
+
+#### Log Files
+Next we need to start up the log file. What does this do? The `log` command is going to create (or replace) a file and write everything that we see in the Stata output window to it. 
+
+We want to do this because it preserves our results. This will make it easier to share and review our results later. For example, if you don't have Stata on hand you can still review a log file (if you set the options correctly).
+
+_Start_ logging:
+<div class='fold o'>
+```{r,collectcode=TRUE,class='sh_stata'}
+//log using $log_file , replace text
+disp "hello"
+//log close
+```
+</div>
+Let's discuss each of the elements of this command:
+
+- `log using $log_file` - Begin to log "using" the specified file. In this case it is the name that we defined above.
+- `,` - The comma separates the main command from the options in Stata.
+- `replace` - Stata will try to open a new log file. However, if we run the do-file several times a log file was already created. This tells Stata that it is okay to go ahead and replace the pre-exsting log file if it finds one.
+- `text` - This option will specify the output format of the log file. By specifying `text` we ensure that we will be able to open and read the log file in _any_ text editor, not just Stata.^[The alternative (and default) option is an `.smcl` file. These files only appear to be well-formatted when opened in Stata. I don't know of any obvious advantages to this file type.]
+
+Once we start the log file Stata will write all of our commands (not just those in the do-file) to the log file until we tell it to stop logging. To do this we will add a line at the end of the file--`log close`. It is a good idea to add this line at the same time that you add the log start statement (so that you don't forget later) then write the rest of your commands between these two lines.
+
+If you're debugging the file while running it you may run into an error that halts the execution of the code. Since your `log close` statement is below the error line, it will not be executed. Thus, the log file is still open. If you then try to re-run the code you will get an error at the `log using` line saying that a log file is already open. One way to get around this is to comment out these two lines while you're writing the file (you probably won't need to look at them until after you're done writing the file anyway). Make a note to make sure that you go back and log in the end.
+
+## Data Cleaning and Shoveling
+
+Start with the dataset in "data/raw/lifeexp-eur&asia".
+
+<div class='fold o'>
+```{r,collectcode=TRUE,class='sh_stata'}
+// Open the base dataset
+use "data/raw/lifeexp-eur&asia", replace
+```
+</div>
+
+For more on use of the `use` command type `help use` onto the command line.
+
+Now we're going to inspect the data that was just loaded in to see i) what it is and ii) if it makes sense.
+
+<div class='fold o'>
+```{r,collectcode=TRUE,class='sh_stata'}
+// Inspect it: (Bad labels, data types, no labels, missing data)
+describe
+```
+</div>
+
+Notice that the data labels for `region` and `country` appear to be switched around. We can check which is wrong (bad labels or bad variable names?) by looking at the data itself. 
+
+Look at the data itself (I comment this out when running full file because it will limit the number of boxes flashing up).
+<div class='fold o'>
+```{r,collectcode=TRUE,class='sh_stata'}
+//browse //
+```
+</div>
+
+In the data empty entries show up as `.`. Notice that a lot of `safewater` entries are missing.
+
+It also appears to be the case that the labels are mixed up. We can fix this easily:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Correct Errors in Labeling
+label var region Region
+label var country Country
+```
+</div>
+
+We can get a better picture of the missing data:
+
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+misstable summarize, all
+```
+</div>
+
+We want to see both i) how many entries are missing in each entry and ii) if the data seems to make sense. It is not uncommon to program data as being missing by entering the data as `-999` (or something along these lines). This doesn't appear to be the case in this data, though. 
+
+We should also check to make sure that the other variables aren't super-odd. For instance, are the `lexp` entries reasonable? We shouldn't see negative entries or entries above 100 (or 90 really).
+
+Also, if we're working with hand-entered (or OCR'd) data we would want to do a lot more to check for mis-types.
+
+### Combining Data: Append and Merge
+
+We have just imported some data. Usually we need to combine this data with some other datasets in order to get the full set of variables that we need.
+
+There are two principle operations that we might carry out:
+
+- `append` adds additional *rows* to the frame. For instance, we could append a line for the U.S.
+- `merge` adds additional *columns* to the frame. In a minute we will add data on GNP for each country. 
+
+#### Append
+
+We have a second dataset that is similar to the first but has additional countries from the Western Hemisphere.
+
+We begin by peaking into the data to be appended to make sure that it is suitable for being merged.
+
+The `preserve` command is going to store the data we have in memory right now while we open the other dataset.
+
+Then open up the other data file and do the same data quality checks as before:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Preserve current data for later
+preserve
+// Now using new data
+use "data/raw/lifeexp-america", clear
+// Run same checks on this data as last
+describe
+browse
+misstable summarize, all
+// Restore previous data
+restore
+```
+</div>
+
+In order to do a succesful append we need to make sure that the variable names in the two files match up as we want them to. For instance, we need to make sure that the cases of the variable names are the same. Stata is _case-sensitive_; i.e. interprets `POPGROWTH` differently from `popgrowth`. 
+Everything looks good. We can `restore` the Europe and Asia data from memory (i.e. undo the `preserve` from earlier) and carry out the append:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Append
+append using "data/raw/lifeexp-america"
+```
+</div>
+
+#### Merge
+
+Now we're going to _merge_ our current dataframe with a dataset containing variables on GNP per capita by country.
+
+In order to merge we need to ensure that we have common variables between the two datasets and that these merge variables play well together.
+
+Stata requires that the two merge variables have identical names. Also, the `merge` command is "stupid" in the sense that it will only match values that are exactly identical; it cannot tell that `U.S.` and `United States` are the same countries.[^ For that matter, it can't tell that `united states` and `United States` are the same country.]
+
+As with the other datasets we begin by inspecting the new dataset.
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Merge dataset on per capita income - add COLUMNS
+// Peak into merging dataset to check for problems, identify merging variables
+save "data/int/lifeexp", replace
+use "data/raw/gnppc", clear
+describe
+browse
+misstable summarize
+```
+</div>
+
+We see that there is a country variable but that it needs to be converted to lowercase in order to match with the variable in the other "master" dataset. Let's do that.
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+* Can match on country name but need variables to be the same
+rename Country country
+* Save as NEW dataset in 'data/int'
+save "data/int/gnppc_for_merge", replace
+* Get old data
+use "data/int/lifeexp"
+```
+</div>
+
+Notice how I saved the modified data in a _new_ file in the `int`ermediate data directory. This is in keeping with the idea that--in order to ensure the replicability of the analysis--we never actually change the original data.^[ In particular, if we did this our `do` file couldn't be run more than once without error--the files that it is manipulating on the second run wouldn't be the same as those that we manipulated on the first.]
+
+Okay, let's go ahead and try to merge. The merge syntax is similar to the append syntax except we need to specify the merge type and the merge variables.
+
+For the merge type I specify `1:1`. That is, we tell Stata that, for each entry in the master data, we should find exactly one entry in the using data. This is a nice way of ensuring that you're not introducing or removing spurious observations.^[`1:1` can be compared to a many-to-one (`m:1`) merge, which says that there may be several rows in the master data that correspond to the same row in the using data. For example, suppose that we were going to merge GNP _by region_ to the data. There are many countries for each region, which would lead to a `m:1` merge. A `1:m` merge is the mirror inverse of the `m:1` merge; e.g. let the GNP-by-region data be the master and the life expectancy data be the using data. We can also do a `m:m` merge. Notice that this case is especially dicey because we're actually potentially introducing _new_ observations into the data.]
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Now do the actual merge!
+// Still a bit hazy on the "sort" rationale. Just do it if you get an error...
+sort country
+// Let's preserve the data in case something goes wrong on merge
+save "data/int/lifeexp", replace
+// Merge
+merge 1:1 country using "data/int/gnppc_for_merge"
+```
+</div>
+
+The merge command gives us a summary of how succesful the merge was. Let's look into the variables that weren't merged and make sure that they make sense. We should also `browse` the data to make sure that the data that was reported as being succesfully merged was merged correctly.
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// What countries were left out?
+list region country _merge if _merge != 3
+```
+</div>
+
+Okay, notice that there is an unmatched master entry called `Macedonia FYR` and an unmatched using entry called `Macedonia`. These are probably the same country but we should probably check it out to make sure. (I found the `FYR` to be somewhat puzzling--is it maybe an annotation added by someone to specify something...?) Let's just look up [Macedonia](https://en.wikipedia.org/wiki/Republic_of_Macedonia) on Wikipedia and see if anything pops up. In fact, it does. These are referring to the same country.
+
+In this next chunk I'm going to go back into the using data and rename the entry for Macedonia. But I'm also going to add a block comment with what I found out about Macedonia. The idea here is that--at some point down the line--you or someone else are going to be looking at the code (maybe for a bug) and you're going to wonder if this is actually correct. Save your future self a moment and put it right in the code:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+/* 
+Appears that Macedonia and Macedonia FYR are actually the same country?
+
+Yes, from Wikipedia entry for "Republic of Macedonia"
+ (https://en.wikipedia.org/wiki/Republic_of_Macedonia)
+
+	It became a member of the United Nations in 1993, but, as a result of an 
+	ongoing dispute with Greece over the use of the name "Macedonia", was 
+	admitted under the provisional description the former Yugoslav Republic 
+	of Macedonia[10][11] (sometimes unofficially abbreviated as FYROM and 
+	FYR Macedonia), a term that is also used by international organizations 
+	such as the European Union,[12] the Council of Europe[13] and NATO.[14]
+*/ 
+
+// Amend gnppc_for_merge data
+use "data/int/gnppc_for_merge", clear
+// Change a single name
+replace country = "Macedonia FYR" if country == "Macedonia"
+// Save
+save "data/int/gnppc_for_merge", replace
+// Restore back life expectations data
+use "data/int/lifeexp", replace
+```
+</div>
+
+Now let's try this merge again.
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Merge again
+// Merge
+merge 1:1 country using "data/int/gnppc_for_merge"
+
+// What countries were left out?
+li region country _merge if _merge != 3
+// Check on Macedonia:
+li region country _merge if country == "Macedonia FYR"
+```
+</div>
+
+Everything looks to be in order. At this point the data is ready for analysis. Let's go ahead and save it to the `fin`al data directory.
+
+This is useful if we want to come back and do something later but don't feel like re-running the entire setup above. 
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Data is ready for analysis. Save it to 'data/fin' 
+save "data/fin/lifeexp_main", replace
+```
+</div>
+
+### Descriptive Statistics
+
+In this section we discuss descriptive statistics like the mean, media, and variance of the variables.
+
+The most common command here is `summarize` (which can be abbreviated to `su`). Here's the basic usage:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Basic Summary Stats - All variables by default
+su
+// Particular set of variables
+su lexp safewater
+```
+</div>
+
+Can we get more information than that? Sure: use `detail`
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+su gnppc, detail
+```
+</div>
+
+#### Subsetting Data
+
+Oftentimes we'll only want to run a command on a subset of the data. For example, we might want to see how the results change if we exclude some possible outliers or if we restrict the data to a group of observations (e.g. countries in North America, students in Ms. Jone's class).
+
+Stata provides fairly simple syntax that can be used to subset data that is uniform across many common commands.
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Stats by region
+bysort region: su lexp popgrowth
+// Stats for subsets meeting logical condition
+su lexp popgrowth if lexp > 75
+//  include if (EITHER lexp > 75 OR lexp < 72)
+su lexp popgrowth if lexp > 75 | lexp < 72
+//  include if (lexp > 75 AND in region 1)
+su lexp popgrowth if lexp > 75 & region == 1
+```
+</div>
+
+In the last few lines I've combined logical conditions by using the `&` ('and') and `|` ('inclusive or') operators.
+
+#### Use Macros
+
+We now consider another subsetting problem: figure out the median life expectancy in the sample then get summary stats for the subsets of countries that are above/below the median.
+
+When we call `su` (and many other commands) a number of macro variables will be created. You can see the full set of macro variables that are created at the bottom of the help pages (command: `help su`).
+
+We're going to get the macro for the median, save it to a a new macro (so that it isn't overwritten) and then run the stats.^[Does all of this macro business seem like overkill? Why shouldn't we just copy and paste the one number back into the do editor? Well, suppose that you realized that you messed up one of the steps in the previous section. Then the number that you copied and pasted here will probably no longer be correct. Now we could go back and update the median in the do file. However, this seems pretty cumbersome and I, for one, do not trust myself to remember that this even needs to be fixed.]
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Detailed stats
+su gnppc, detail
+// Save median GNP for later
+local gnp_med = `r(p50)'
+// Stats for subsets meeting logical condition: If GNP above/below median.
+su lexp popgrowth if gnppc < `gnp_med'
+su lexp popgrowth if gnppc >= `gnp_med'
+```
+</div>
+
+#### Wildcards
+
+It can be somewhat tedious to write out certain variables or sets of variables. Fortunately, Stata makes it fairly easy to reference those variables without writing them all out explicitly. 
+
+The basic idea of a wildcard variable is that you enter some fragment of a variable name and stata will return all variables that match the fragment. 
+
+Consider the following hypothetical example:^[If you're familiar with regular expressions you may be wondering if you can use those to select variable names. You can't do this without complicating things a bit more. See `help regex` for more info.]
+
+	// Variables: emp29, emp30, emp31, rmpd, gdp, log_gdp
+	// Prefix - Get all variables matching the prefix
+	emp*	=>		emp29, emp30, emp31
+	// Suffix - Get all variables matching the suffix
+	*gdp	=> 		gdp, log_gdp
+	// Prefix and Suffix - Get all variables where string occurs at any point
+	*mp*	=>		emp29, emp30, emp31, rmpd
+
+Let's try it in the real data:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Select variables - safewater and variables with "p" in name
+su safewater *p*
+```
+</div>
+
+## Correlations and Regressions
+
+The most common command for correlations is `corr`. We can use the exact same syntax that we did with `su` to subset the data:^[In fact, I've simply copied and pasted the code chunk from above and replaced `su` with `corr`.]
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+corr pop* lexp gnppc safewater
+// By region
+bysort region: corr lexp popgrowth
+// For subsets meeting logical condition
+corr lexp popgrowth if lexp > 75
+//  include if (EITHER lexp > 75 OR lexp < 72)
+corr lexp popgrowth if lexp > 75 | lexp < 72
+//  include if (lexp > 75 AND in region 1)
+corr lexp popgrowth if lexp > 75 & region == 1
+```
+</div>
+
+The most common command for regressions is `reg`:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+reg pop* lexp gnppc safewater, r
+// By region
+bysort region: reg lexp popgrowth, r
+// For subsets meeting logical condition
+reg lexp popgrowth if lexp > 75, r
+//  include if (EITHER lexp > 75 OR lexp < 72)
+reg lexp popgrowth if lexp > 75 | lexp < 72, r
+//  include if (lexp > 75 AND in region 1)
+reg lexp popgrowth if lexp > 75 & region == 1, r
+```
+</div>
+
+Notice that I've added an option to include `r`obust standard errors (see `help reg` for more info).
+
+#### Correlations--Treatment of Missing Data
+
+There are several countries in our data that have missing data entries. We need to think carefully about how we want to deal with this in our analysis as this will affect the interpretation of our results. 
+
+In this part I want to briefly discuss how Stata deals with missing data _by default_ in the context of correlations. The default treatment of missing data for a given command may not be the _best_ treatment of missing data for your project so you need to be aware of what it's doing and how you can change the behavior.
+
+How does `corr` deal with missing data? Consider the first four entries of the data:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+li country pop* lexp gnppc safewater in 1/4
+```
+</div>
+
+The first two countries have full data so they are kept. The second two lack data on safewater so they are removed. However, to compute a correlation coefficient between `popgrowth` and `lexp` we only need non-missing data for these two variables! 
+
+Does this make sense? Is Stata throwing good data away? Try to think of cases where it may or may not.
+
+Suppose that we don't want Stata to treat missing data like this. Then we can use the `pwcorr` command, which computes _elementwise_ coefficients by default:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// NOTICE: these are different!
+corr pop* lexp gnppc safewater
+pwcorr pop* lexp gnppc safewater, obs 
+// Restrict pwcorr to sample of countries with full data to get back corr
+pwcorr pop* lexp gnppc safewater ///
+	if popgrowth != . & lexp != . & gnppc != . & safewater != . , obs
+// pwcorr can also display p-values for null hypothesis H0: CORR != 0
+pwcorr  lexp gnppc safewater, sig
+```
+</div>
+
+#### Dummy/Factor Variables in Regression
+
+Suppose we want to include a dummy variable in a regression. How do we do this? I'm going to give a sketch here.
+
+First, in order to use dummy variables we need to tell Stata that a variable should be interpreted as a factor/dummy/categorical variable.
+
+If you `browse` the data you'll notice that `country` and `region` have different font colors even though they both seem to be strings (i.e. words/characters rather than numbers). Look closely at the top bar of the browse window. When you click a cell the data will appear in the bar. But now notice that if we select a cell in the `region` column a number comes up. Under the hood `region` is in fact an integer variable, not a string; it just displays as a string. This integer is simply an _index_ for the region. It has no intrinsic meaning.
+
+Now compare the following two regressions:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+xi: reg popgrowth lexp gnppc i.region, r
+reg popgrowth lexp gnppc region, r
+```
+</div>
+
+The first regression creates several new variables. Figure out what they're doing. How does the interpretation of the region variables differ across specifications? 
+
+I will say that the first makes sense while the second is completely non-sensical. The reason has to do with the fact that the indices of the regions are arbitrary.
+
+## Graphs
+
+There is a lot that can be done with graphs in Stata. The basic command is `twoway`. See the help file.
+
+A quick twoway plot can be created as follows:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+scatter lexp gnppc
+```
+</div>
+
+<!-- ![](figures/test_fig.png) -->
+To make anything more elaborate we need to delve into `twoway`. I will do this presently using some new data from the [Penn World Tables (PWT)](http://www.rug.nl/ggdc/).
+
+### PWT Data Setup and Context
+
+My goal is to make a scatterplot that will help me to evaluate Solow's "Strong Convergence" Hypothesis: countries that are initially poor will have greater subsequent growth.^[See chapter 3  of Ray for more details.]
+
+I first need to set up the data. In doing so I introduce some new commands:
+
+- `import excel` one way to begin to get excel or other, non-`.dta` files into Stata
+- `do` call and excecute another do file
+- `xtset` sets up a panel.
+- `encode` makes a string variable a factor variable like `region`
+- `egen` provides many ways of combining data to create a new variable.
+- `reshape` pivots/reshapes/transposes data along select dimensions
+
+Here is the code:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// Bring in PWT
+import excel "data/raw/pwt90.xlsx", sheet("Data") firstrow clear
+// Run the labels
+do "do/pwt_label"
+
+// Add in continent codes for later - many to one merge
+preserve
+import delimited "data/raw/country_continents.csv", clear 
+drop countrycode
+rename alpha3 countrycode
+save "data/int/country_continents", replace
+restore
+merge m:1 countrycode using "data/int/country_continents"
+keep if _merge == 3
+drop _merge
+
+// Set up panel
+// Need the country variable to be a factor variable
+encode country, gen(country_fac)
+// Displays variable in terms of underlying label/string
+tab country_fac
+// But under the hood it is actually a number! Uncomment and run (throws error)
+/*
+count if country_fac == "Turkmenistan"
+count if country == "Turkmenistan"
+*/
+
+// Now set panel
+xtset country_fac year
+```
+
+```{r,class='sh_stata',collectcode=TRUE}
+// Make average growth rates
+// For purposes of comparison, let's drop all years < 1970
+keep if year >= 1970
+// For ease of analysis, let's just keep those variables that we'll be needing
+keep year country* rgdpe pop *region*
+// Make log income per capita - Notice that rgdpe and pop both in millions
+gen log_gdp_pc = log(rgdpe) - log(pop)
+label var log_gdp_pc "Log GDP per capita - log(rgdpe / pop)"
+// Now make a growth rate using the lag operator
+gen d_gdp_pc = D.log_gdp_pc
+label var d_gdp_pc "Growth GDP per capita - D.log_gdp_pc"
+// Make mean growth rates using egen and bysort
+bysort country: egen mean_d_gdp_pc = mean(d_gdp_pc)
+// Make a percent by multiplying by 100
+replace mean_d_gdp_pc  = mean_d_gdp_pc * 100
+label var mean_d_gdp_pc "Mean Growth - GDP per capita (%), 1970-2014"
+// Should do spot check to make sure correct
+order country mean_d_gdp_pc
+//browse
+
+// How do we get the first year's GDP?
+// reshape! long -> wide
+// What do we need?
+keep log_gdp_pc mean_d_gdp_pc country* year *region*
+reshape wide log_gdp_pc, i(country) j(year)
+// Really only need to keep the log_gdp_pc from 1970 - Make a new variable
+gen init_log_gdp_pc = log_gdp_pc1970
+label var init_log_gdp_pc "Log GDP per capita, 1970"
+// Drop all others
+drop log_gdp_pc*
+```
+</div>
+
+#### Plotting
+
+Let's start out with another simple plot:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+scatter mean_d_gdp_pc init_log_gdp_pc
+```
+</div>
+
+<div class='fold o'>
+```{r,engine='R',echo=FALSE}
+library(png)
+#Replace the directory and file information with your info
+img <- readPNG("figures/test_fig.png")
+grid::grid.raster(img)
+```
+</div>
+
+It kind of looks like there's a weak negative correlation between the variables. Indeed, if we run an OLS regression we find that the correlation is significant at the 10% level. In fact, a long line of literature has found just the opposite--there is no close correlation at all. What gives?! 
+
+If we look at our figure we see that there are a few high-income countries that seem to be outliers.^[Also, 
+if we compare our figure to Ray's Fig. 4.5 from his updated chapter 3 ([here](http://www.econ.nyu.edu/user/debraj/Courses/14UGDev/Handouts/RayCh3UpdatePart2.pdf)) 
+we see that he cuts off the per capita income at $30,000.]
+
+Let's try to think of a way to deal with those datapoints. First, who are they? Let's replace the circles with country abbreviations:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+twoway (scatter mean_d_gdp_pc init_log_gdp_pc if init_log_gdp_pc <= log(30000), ///
+	mlabel(countrycode) mlabp(0) m(i) mlabs(1.65)) || ///
+	(scatter mean_d_gdp_pc init_log_gdp_pc if init_log_gdp_pc > log(30000), ///
+	mlabel(countrycode) mlabp(0) m(i) mlabs(1.65) ///
+	legend(off) ///
+	title("Initial GDP and Subsequent Growth, 1970-2014") ///
+	)
+```
+</div>
+<div class='fold o'>
+```{r,engine='R',echo=FALSE}
+library(png)
+#Replace the directory and file information with your info
+img <- readPNG("figures/split_gdp.png")
+grid::grid.raster(img)
+```
+</div>
+
+Aha, they're all countries with a bunch of oil! Long story short, this is a lurking variable in the anaylsis. For the purpose of making our graph, then, we'll get rid of them.
+
+Consider the modified picture:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+twoway scatter mean_d_gdp_pc init_log_gdp_pc  if init_log_gdp_pc <= log(30000), ///
+	title("Initial GDP and Subsequent Growth, 1970-2014") ///
+	mlabel(countrycode) mlabp(0) m(i) mlabs(1.45)
+```
+</div>
+<div class='fold o'>
+```{r,engine='R',echo=FALSE}
+library(png)
+#Replace the directory and file information with your info
+img <- readPNG("figures/non_oil_alpha.png")
+grid::grid.raster(img)
+```
+</div>
+Notice how--having removed the outliers--the apparent correlation falls apart. Part of this is just mechanical. But I think that an important part of it has to do with how we perceive figures; make a lot of graphs to be sure that you're eyes aren't playing any tricks on you.
+
+What if we wanted to see how the correlation held up across continents? Here's two possibilities:
+<div class='fold o'>
+```{r,class='sh_stata',collectcode=TRUE}
+// What about separate plots by continent?
+twoway scatter mean_d_gdp_pc init_log_gdp_pc, ///
+	mlabel(countrycode) mlabp(0) m(i)  mlabs(1.45) ///
+	by(region)
+// One plot with color by subregion?
+separate mean_d_gdp_pc, by(region)
+twoway scatter mean_d_gdp_pc* init_log_gdp_pc, ///
+	title("Initial GDP and Subsequent Growth, 1970-2014") ///
+	legend(off) m(i) ///
+	ytitle("Mean Growth - GDP per capita (%), 1970-2014")
+```
+</div>
+<div class='fold o'>
+```{r,engine='R',echo=FALSE}
+library(png)
+#Replace the directory and file information with your info
+img <- readPNG("figures/by_continent_sep.png")
+grid::grid.raster(img)
+```
+</div>
+<div class='fold o'>
+```{r,engine='R',echo=FALSE}
+library(png)
+#Replace the directory and file information with your info
+img <- readPNG("figures/by_continent_tog.png")
+grid::grid.raster(img)
+```
+<!-- ![ ](export figures/by_continent_sep.png) -->
+<!-- ![ ](export figures/by_continent_tog.png) -->
+</div>
+
+```{r, engine='R', echo=FALSE}
+unlink("profile.do")
+```
